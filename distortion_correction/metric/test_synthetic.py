@@ -12,16 +12,16 @@ pattern = gen_grid(camera.get_fov(extend=1.5), 100)
 image_u = camera.distortion_free(pattern)
 image_d = camera.distort(pattern, k1=-0.05, theta=np.radians(5/60), division=False)
 # image_u *= 3
-# image_u[:, 0] += 0
-# image_u[:, 1] += 0
+image_u[:, 0] += 10
+image_u[:, 1] += 5
 
 # image_d[:, 0] += 1000
 # image_d[:, 1] += 1000
-cod = (-5.898387629390528e-05, -22.17879956333988)
+cod = (-10.292482375447554, -4.485727267023122)
 # cod=(1000, 1000)
-plt.scatter(image_u[:, 0], image_u[:, 1])
-plt.scatter(image_d[:, 0], image_d[:, 1])
-plt.show()
+# plt.scatter(image_u[:, 0], image_u[:, 1])
+# plt.scatter(image_d[:, 0], image_d[:, 1])
+# plt.show()
 
 def testPM():
     dm = MetricPolyDC(11)
@@ -50,18 +50,19 @@ def testRFM():
 
 
 def testRTM():
-    dm = MetricRTMDC(5, tangential=True)
+    dm = MetricRTMDC1(5)
+    # dm = MetricRTMDC(5)
     dm.estimate(image_d, image_u, cod=cod)
     print(dm.model.intercept_)
     print(dm.model.coef_)
     mse = dm.evaluate(image_d, image_u)
     print(mse)
 
-    image_c = dm.undistort(image_d)
+    # image_c = dm.undistort(image_d)
 
-    plt.scatter(image_u[:, 0], image_u[:, 1])
-    plt.scatter(image_c[:, 0], image_c[:, 1])
-    plt.show()
+    # plt.scatter(image_u[:, 0], image_u[:, 1])
+    # plt.scatter(image_c[:, 0], image_c[:, 1])
+    # plt.show()
 
 def testRTMNonlinear():
     m = MetricRTMDCN(5)
@@ -124,10 +125,11 @@ def compare():
     mse2 = m2.evaluate(image_d, image_u)
     print(mse1)
     print(mse2)
+
 if __name__ == "__main__":
     # testPM()
     # testRFM()
-    # testRTM()
+    testRTM()
     # testRTMNonlinear()
     # testDM()
     # testRCPM()

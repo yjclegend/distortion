@@ -83,6 +83,7 @@ class MetricRFMDC(DistortionCorrection):
 # 中心畸变模型实际上需要畸变图像的cod_d和零畸变图像的cod_u两个cod参数
 # RTM模型的cod_u可作为线性项求解，DM模型则是非线性项，需要预估
 # 在过去的方法中，通过矩阵拆分获得的cod实际上是
+# the model does not assume k0=1 to be generalizable to scaling
 class MetricRTMDC(DistortionCorrection):
     def __init__(self, deg=7, tangential=True, name='metric_rtm_dc'):
         """
@@ -92,32 +93,27 @@ class MetricRTMDC(DistortionCorrection):
         self.set_degree(deg)
         self.tangential = tangential
         self.scaler = StandardScaler()
-        self.model = LinearRegression(fit_intercept=True)
+        self.model = LinearRegression(fit_intercept=False)
 
     def set_degree(self, deg):
         super().set_degree(deg)
         self.terms = (deg - 1) // 2
 
-    def gen_features(self, source):
+    def gen_features(self, source, is_train):
         xd = source[:, 0] - self.cod[0]
         yd = source[:, 1] - self.cod[1]
         r2 = xd**2 + yd**2
         
         features_x = list()
-        # 是否包含0次项
-        # for i in range(self.terms):
-        #     features_x.append(xd * r2**(i + 1))
+        # contains the zero order term of r2
         for i in range(self.terms + 1):
             features_x.append(xd * r2**(i + 0))
-
         if self.tangential:
             features_x.append(r2 + 2 * xd**2)
             features_x.append(2 * xd * yd)
         features_x = np.column_stack(features_x)
-
+        
         features_y = list()
-        # for i in range(self.terms):
-        #     features_y.append(yd * r2**(i + 1))
         for i in range(self.terms + 1):
             features_y.append(yd * r2**(i + 0))
         if self.tangential:
@@ -126,25 +122,29 @@ class MetricRTMDC(DistortionCorrection):
         features_y = np.column_stack(features_y)
 
         features = np.concatenate([features_x, features_y])
+        length = len(source)
+        features = np.column_stack([features, np.ones((length * 2, 2))])
+        features[:length, -1] = 0
+        features[length:, -2] = 0
+
         return features
 
     def estimate(self, source, dest, cod=(0, 0)):
         self.cod = cod
-        features = self.gen_features(source)
-        std_features = self.scaler.fit_transform(features)
-        # target = np.concatenate([dest[:, 0] - source[:, 0], dest[:, 1] - source[:, 1]])
+        features = self.gen_features(source, is_train=True)
+
         target = np.concatenate([dest[:, 0], dest[:, 1]])
 
-        self.model.fit(std_features, target)
+        self.model.fit(features, target)
 
     
     def undistort(self, points):
-        features = self.gen_features(points)
-        std_features = self.scaler.transform(features)
+        features = self.gen_features(points, is_train=False)
+        std_features = features#self.scaler.transform(features)
         undist_x_y = self.model.predict(std_features)
         s = len(undist_x_y)
-        x = undist_x_y[0: s // 2]# + points[:, 0]
-        y = undist_x_y[s // 2:]# + points[:, 1]
+        x = undist_x_y[0: s // 2]
+        y = undist_x_y[s // 2:]
         return np.column_stack([x, y])
 
 
@@ -158,13 +158,28 @@ class MetricRTMDC1(DistortionCorrection):
         self.set_degree(deg)
         self.tangential = tangential
         self.scaler = StandardScaler()
+        # self.scalert = StandardScaler()
+        # self.model = Ridge(fit_intercept=False)
+        # linearRegression may fail when constant terms cx and cy are included and no normalization is conducted
+        # In such cases, use Ridge instead
         self.model = LinearRegression(fit_intercept=False)
+        # the model itself shall have no intercept term in the linear model.
+        # The cod in the distortion-free coordinates are considored different from the cod in the distorted image
+        # This is similar to the intrinsic matrix that shift the pixels by a fixed amount
+        # The cod_u are estimated as unknowns, to support translation invariance of results.
+        # this is most helpful for decoupled distortion correction, because the cod_u is usually not the same as cod_d
+        
+        # When the cod_u is not included as unknowns, and the inputs are scaled, intercep must be fitted to address posterior shift
+        # otherwise, the target can also be normalized, but not recommended
+
+        # In general, the best implementation is to (1)include cod_u as unkown, (2) scale the input with standard scaler
+        # (3) use the linearRegression model with fit_intercept set to False
 
     def set_degree(self, deg):
         super().set_degree(deg)
         self.terms = (deg - 1) // 2
 
-    def gen_features(self, source):
+    def gen_features(self, source, istrain):
         xd = source[:, 0] - self.cod[0]
         yd = source[:, 1] - self.cod[1]
         r2 = xd**2 + yd**2
@@ -185,22 +200,38 @@ class MetricRTMDC1(DistortionCorrection):
         features_y = np.column_stack(features_y)
 
         features = np.concatenate([features_x, features_y])
+
+        if istrain:
+            std_features = self.scaler.fit_transform(features)
+        else:
+            std_features = self.scaler.transform(features)
+        length = len(source)
+        features = np.column_stack([std_features, np.ones((length * 2, 2))])
+        features[:length, -1] = 0
+        features[length:, -2] = 0
+
         return features
 
     def estimate(self, source, dest, cod=(0, 0)):
         self.cod = cod
-        features = self.gen_features(source)
-        std_features = features #self.scaler.fit_transform(features)
+        features = self.gen_features(source, istrain=True)
+
+        # std_features = self.scaler.fit_transform(features)
         target = np.concatenate([dest[:, 0] - source[:, 0], dest[:, 1] - source[:, 1]])
-        self.model.fit(std_features, target)
+        # target = self.scalert.fit_transform(target.reshape(-1, 1))
+        self.model.fit(features, target)
     
     def undistort(self, points):
-        features = self.gen_features(points)
-        std_features = features #self.scaler.transform(features)
-        undist_x_y = self.model.predict(std_features)
+        features = self.gen_features(points, istrain=False)
+        # std_features = self.scaler.transform(features)
+        undist_x_y = self.model.predict(features)
+        
+        # undist_x_y = self.scalert.inverse_transform(undist_x_y)
+
         s = len(undist_x_y)
-        x = undist_x_y[0: s // 2] + points[:, 0]
+        x = undist_x_y[: s // 2] + points[:, 0]
         y = undist_x_y[s // 2:] + points[:, 1]
+
         return np.column_stack([x, y])
     
 class MetricRTMDCN(DistortionCorrection):
@@ -216,31 +247,32 @@ class MetricRTMDCN(DistortionCorrection):
     def set_degree(self, deg):
         super().set_degree(deg)
         self.terms = (deg - 1) // 2
-        self.param_count = 2 + self.terms
+        self.param_count = 2 + self.terms + 2 # two for cod_d, two for cod_u
         if self.tangential:
             self.param_count += 2
         self.params:list = [0] * self.param_count
     
     def __undistort(self, xdata, *params):
-            x = xdata[:, 0] - params[0]
-            y = xdata[:, 1] - params[1]
-            r2 = x**2 + y**2
-            ratio = np.ones_like(x)
-            for i in range(self.terms):
-                ratio += r2**(i + 1) * params[i + 2]
-            xu = x * ratio + params[0]
-            yu = y * ratio + params[1]
-            if self.tangential:
-                xu += params[-2] * (r2 + 2 * x**2) + 2 * params[-1] * x * y
-                yu += params[-1] * (r2 + 2 * y**2) + 2 * params[-2] * x * y
-            result = np.concatenate([xu, yu])
-            return result
+        x = xdata[:, 0] - params[0]
+        y = xdata[:, 1] - params[1]
+        r2 = x**2 + y**2
+        ratio = np.ones_like(x)
+        for i in range(self.terms):
+            ratio += r2**(i + 1) * params[i + 2]
+        xu = x * ratio + params[2]
+        yu = y * ratio + params[3]
+        if self.tangential:
+            xu += params[-2] * (r2 + 2 * x**2) + 2 * params[-1] * x * y
+            yu += params[-1] * (r2 + 2 * y**2) + 2 * params[-2] * x * y
+        result = np.concatenate([xu, yu])
+        return result
 
     def estimate(self, source, dest):
+        # seems to have no way to normaliza data
         from scipy.optimize import curve_fit
         # Minimize reprojection error with Levenberg-Marquardt              
         dest = np.concatenate([dest[:, 0], dest[:, 1]])
-        popt, pcov = curve_fit(self.__undistort, source, dest, self.params)
+        popt, pcov = curve_fit(self.__undistort, source, dest, self.params, method='trf')
         self.params = list(popt)
         # print(self.params)
     
@@ -304,7 +336,9 @@ class MetricDMDC(DistortionCorrection):
         pred = self.undistort(source)
         mse = np.mean(distancePoint(dest, pred))
         return mse
+    
 
+# not a good idea
 class MetricRCPMDC(DistortionCorrection):
     def __init__(self, deg=7, name='metric_rcpm_dc'):
         """
@@ -381,6 +415,7 @@ class MetricRCPMDC(DistortionCorrection):
 
         return np.column_stack([xu, yu])
 
+# not a good idea
 class MetricRadialPolyDC(DistortionCorrection):
     def __init__(self, deg=7, name='metric_radialpoly_dc'):
         super().__init__(name)
