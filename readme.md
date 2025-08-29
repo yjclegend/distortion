@@ -62,6 +62,15 @@ Sample code for RFM model training is provided in the `__main__` section of `dis
 - `distortion_correction/` — Core model and metric implementations
 - `requirements.txt` — Python dependencies
 
+## Camera Calibration and Sample Images
+
+The sample chessboard pattern image and scene images provided in `data/` are all captured by the same camera. If you wish to calibrate your own camera:
+
+1. Capture a chessboard pattern image using your camera. Place the chessboard so that it covers as much of the field of view (FOV) as possible.
+2. Use the `train_decoupled` method in `distortion_correction/metric/regression_dc.py` to estimate the distortion correction model from your chessboard image.
+3. Once the model is estimated, you can use it to correct all images captured by this camera.
+4. For image correction, use the scripts `experiments/correct_forward.py` and `experiments/correct_with_interp.py` as described above.
+
 ## Notes
 
 - Ensure all dependencies are installed before running any scripts.
