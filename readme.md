@@ -1,13 +1,13 @@
 # Distortion Correction: Reproduction Guide
 
-This repository provides tools and experiments for camera distortion correction using various regression-based models. The codebase includes synthetic experiments, model training, and image correction scripts.
+This repository provides tools and experiments for camera distortion correction using rational function model (RFM). The codebase includes synthetic experiments, model training, and image correction scripts.
 
 ## Setup
 
 1. **Clone the repository**
 
 ```bash
-git clone <repo-url>
+git clone <git@github.com:yjclegend/distortion.git>
 cd distortion
 ```
 
