@@ -35,11 +35,14 @@ Then run:
 python experiments/model_robustness.py
 ```
 
+
 ## Model Estimation (RFM)
 
 To estimate a distortion correction model (RFM), use a sample image from `data/`. The model parameters will be saved to `saved_model/` by default. To estimate the reverse model, set `reverse=True` in the training function.
 
-Example usage is provided in `distortion_correction/metric/regression_dc.py` under the `train_decoupled` function.
+**Important:** The model parameters used for distortion correction must be loaded from the same camera (i.e., with identical intrinsics) as the images to be corrected. Using mismatched models and images may result in incorrect correction.
+
+Sample code for RFM model training is provided in the `__main__` section of `distortion_correction/metric/regression_dc.py` (see the `train_decoupled` function and its usage).
 
 ## Image Correction
 
