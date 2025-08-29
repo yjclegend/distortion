@@ -44,6 +44,16 @@ class CameraDistortion():
         p_radial = np.column_stack((xr, yr, np.zeros_like(xr)))
         return p_radial
     
+    def __rtm(self, image, k1, k2, k3, p1, p2):
+        x = image[:, 0]
+        y = image[:, 1]
+        r2 = x**2 + y**2
+        ratio = (1 + k1*r2 + k2 * r2**2 + k3 * r2**3)
+        xr = x * ratio + p1 * (r2 + 2*x**2) + 2*p2*x*y
+        yr = y * ratio + p2 * (r2 + 2*y**2) + 2*p1*x*y
+        p_d = np.column_stack((xr, yr, np.zeros_like(xr)))
+        return p_d
+
     # def gen_image_d(self, beta=1, gamma=0, theta=0, d=0, k1=-0.0, noise=0, discretize=False, division=False):
     #     image_a = self.__radial(self.image_i, k1=k1, division=division)
     #     T = np.array((1, 0, 0), (0, 1, -d), (0, 0, 1))
@@ -102,6 +112,11 @@ class CameraDistortion():
             image_d += noise_mat
         return image_d
     
+    def distort_rtm(self, image_i, k1, k2, k3, p1, p2):
+        image_a = self.__rtm(image_i, k1, k2, k3, p1, p2)
+        return image_a[:, :2]
+
+
     def valid_range(self, image_d):
         valid = np.where((image_d[:, 0]<self.w/2) & (image_d[:, 0] > -self.w/2) & (image_d[:, 1]<self.w/2) & (image_d[:, 1] > -self.w/2))
         return valid

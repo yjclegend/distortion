@@ -6,10 +6,8 @@ __pycache__/
 *.pkl
 ~*.docx
 ~*
-data/
+
 *.bmp
-*.png
-*.jpg
 *.pdf
 *.pptx
 *.docx

@@ -1,11 +1,9 @@
 from setuptools import setup, find_packages
 setup(
-    name='calibration',
+    name='distortion',
     version='0.1.0',
-    packages=[  'metrology',
+    packages=[ 
                 'common',
                 'simulation',
-                'imagedata',
-                'proposed',
-                'testing']
+                'distortion_correction',]
 )
