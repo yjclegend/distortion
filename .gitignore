@@ -1,9 +1,8 @@
 .venv/
-saved_model/
+
 __pycache__/
 *.egg-info/
 *.pyc
-*.pkl
 ~*.docx
 ~*
 
@@ -27,3 +26,6 @@ __pycache__/
 *.bak
 
 **/.DS_Store
+image_output_inverse.png
+
+image_output.png

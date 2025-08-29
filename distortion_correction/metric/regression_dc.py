@@ -743,8 +743,8 @@ def train_decoupled(name, path, size, model=U_RFM_DC, reverse=False):
 if __name__ == "__main__":
     pass
     # train_decoupled('decoupled_glass_11x8', 'data/decoupled/glass_8x11full.bmp', (8, 11))
-    train_decoupled('decoupled_glass_30x46', 'data/decoupled/46x30.bmp', (30, 46))
-    # train_decoupled('de_laptop', 'data/decoupled/laptop/46x30.jpg', (30, 46))
+    # train_decoupled('decoupled_glass_30x46', 'data/decoupled/46x30.bmp', (30, 46))
+    train_decoupled('de_laptop', 'data/decoupled/laptop/46x30.jpg', (30, 46))
     # train_decoupled('de_laptop_c1', 'data/decoupled/laptop/8x11.jpg', (8, 11))
 
     # train_decoupled('de_laptop_reverse', 'data/decoupled/laptop/46x30.jpg', (30, 46), reverse=True)
