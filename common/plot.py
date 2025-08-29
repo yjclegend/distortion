@@ -33,3 +33,11 @@ class LinePlot(MatPlotBase):
     def plot_lines(self, x, ys, labels):
         for y in ys:
             self.plot_line(x, y)
+
+
+def my_plot_style():
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)  # Add a grid with lighter style
+    # Set ticks for better readability
+    # Tight layout for better spacing
+    plt.tight_layout()
+    plt.show()

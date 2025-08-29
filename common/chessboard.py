@@ -17,9 +17,10 @@ def findchessboard(image=None, filepath=None, size=(11, 8)):
         image = cv2.imread(filepath, 0)
     if image is None:
         return None
-    
+
     criteria = (cv2.TermCriteria_EPS | cv2.TERM_CRITERIA_MAX_ITER, 50, 1e-6)
-    ret, corners = cv2.findChessboardCorners(image, size, cv2.CALIB_CB_FAST_CHECK | cv2.CALIB_CB_NORMALIZE_IMAGE)#cv2.CALIB_CB_ADAPTIVE_THRESH|
+    ret, corners = cv2.findChessboardCorners(image, size, cv2.CALIB_CB_ADAPTIVE_THRESH|cv2.CALIB_CB_FAST_CHECK | cv2.CALIB_CB_NORMALIZE_IMAGE)#cv2.CALIB_CB_ADAPTIVE_THRESH|
+    print(ret)
     if ret == True:
         print("corners found")
         corners2 = cv2.cornerSubPix(image, corners, (11,11),(-1,-1), criteria)
@@ -42,7 +43,7 @@ def downsample_corners(corners, shape=(11, 8)):
     return corners[idx_list]
 
 
-def create_ground_truth(size=(11, 8)):
+def create_ground_truth(size=(11, 8)): 
     xs_i = np.arange(size[0])
     ys_i = np.arange(size[1])
     x, y = np.meshgrid(xs_i, ys_i)
@@ -56,18 +57,21 @@ def prepare_chessboard(path, size=(11, 8)):
     objp[0,:,:2] = np.mgrid[0:size[0], 0:size[1]].T.reshape(-1, 2)
     objpoints = []
     imgpoints = []
+    imageshape = None
     for f in files:
         print(f)
         image = cv2.imread(os.path.join(path, f), 0)
+        if imageshape is None:
+            imageshape = image.shape[::-1]
         corners = findchessboard(image)
         if corners is not None:
             objpoints.append(objp)
             imgpoints.append(corners)
-    import pickle
-    with open('data/chessboard20240416.pkl', 'wb') as f:
+    # import pickle
+    # with open('data/chessboard20240416.pkl', 'wb') as f:
 
-        pickle.dump(imgpoints, f)
-    return objpoints, imgpoints
+    #     pickle.dump(imgpoints, f)
+    return objpoints, imgpoints, imageshape
 
 def findcorners(image=None, filepath=None):
     if filepath is not None:
@@ -93,19 +97,18 @@ def findcorners(image=None, filepath=None):
 
 
 def test_findchessboard():
-    img = cv2.imread('data/chessboard_dense/30x46.bmp', 0)
-    corners = findchessboard(img, size=(30, 46))
+    import matplotlib.pyplot as plt
+    # img = cv2.imread('data/decoupled/46x30.bmp', 0)
+    img = cv2.imread('data/decoupled/laptop/46x30/20241104-102243-218.jpg', 0)
+
+    corners = findchessboard(img, size=(46, 30))
     # corners = downsample_corners(corners, shape=(47, 31))
     # print(corners[:50])
-    import matplotlib.pyplot as plt
+
 
     plt.imshow(img)
     plt.scatter(corners[:, 0], corners[:, 1])
     plt.show()
-
-def test_findcorners():
-    img = cv2.imread('data/chessboard_dense/Image_20230518224319610.bmp')
-    corners = findchessboard(img)
 
 
 def test_dense():
@@ -130,7 +133,7 @@ def test_dense():
 
 if __name__ == '__main__':
     pass
-    create_ground_truth()
+    # create_ground_truth()
     # test_dense()
     # grid_ground_truth(8, 11)
-    # test_findchessboard()
+    test_findchessboard()
