@@ -9,6 +9,9 @@ class ZhangOpenCV(DistortionCorrection):
     def __init__(self, shape=(3840, 2748), name='Zhang'):
         super().__init__(name=name)
         self.imgshape=shape
+    
+    def set_imgshape(self, shape):
+        self.imgshape=shape
 
     def calibrate(self, objpoints, imgpoints):
         _, self.mtx, self.dist, _, _ = cv2.calibrateCamera(objpoints, imgpoints, self.imgshape, None, None)
@@ -36,11 +39,12 @@ class ZhangOpenCV(DistortionCorrection):
         return np.reshape(dst, (len(dst), 2))
 
 
-def test1(name='chessboard20240416'):
+def train_zhang(name, path='data/decoupled/glass_calibrate', size=(11, 8)):
     zc = ZhangOpenCV()
-    objpoints, imgpoints = prepare_chessboard('data/'+name)
+    objpoints, imgpoints, imageshape = prepare_chessboard(path, size)
+    zc.set_imgshape(imageshape)
     # zc.calibrate(objpoints, imgpoints)
-    zc.calibrate_k1k2k3(objpoints, imgpoints)
+    zc.calibrate_k1(objpoints, imgpoints)
 
     zc.save_model(name)
     # zc.calibrate_k1(objpoints, imgpoints)
@@ -50,9 +54,6 @@ def test1(name='chessboard20240416'):
 
 
 if __name__ == "__main__":
-    # c = Calibration("chessboard_c2", (11, 8))
-    # c.prepareData()
-    # calibration("data/2023-02-10/zhang", (11, 8))
-    # undistort('data/2023-02-10/2.bmp', "data/2023-02-10/zhang/coeffs.pkl")
-    test1()
-    # test2()
+    # train_zhang('glass_calibrate')
+    # train_zhang('zc_laptop', 'data/decoupled/laptop/8x11_glass')
+    train_zhang('zc_dl', 'data/decoupled/laptop/46x30')

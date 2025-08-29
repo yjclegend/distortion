@@ -4,12 +4,14 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, PolynomialFeatures
 from sklearn.linear_model import Lasso, LinearRegression, Ridge, RidgeCV
 
+
 from distortion_correction.base_model import DistortionCorrection
 from common.geometry import distancePoint
 
 
 
-class MetricPolyDC(DistortionCorrection):
+
+class U_PM(DistortionCorrection):
     def __init__(self, deg=7, name='metric_poly_dc'):
         """
         deg: the highest degree of polynomial
@@ -27,15 +29,36 @@ class MetricPolyDC(DistortionCorrection):
         features = self.poly.fit_transform(source)
         std_features = self.scaler.fit_transform(features)
         assert(std_features.shape[1] == (self.degree + 1) * (self.degree + 2) / 2 - 1)
+        # print("NaN in features:", np.isnan(std_features).any())
+        # print("Inf in features:", np.isinf(std_features).any())
+        # print("NaN in target:", np.isnan(dest).any())
+        # print("Inf in target:", np.isinf(dest).any())
+        # svals = np.linalg.svd(std_features, full_matrices=False, compute_uv=False)
+        # cond = svals.max() / svals.min()
+        # print("condition number:", cond)
+        # exit()
+        # import time
+        # start = time.time()
         self.model.fit(std_features, dest)
+
+        # end = time.time()
+        # print("training time pm:", end-start)
     
     def undistort(self, points):
         features = self.poly.transform(points)
         std_features = self.scaler.transform(features)
+        assert(std_features.shape[1] == (self.degree + 1) * (self.degree + 2) / 2 - 1)
+        # Xp = np.asarray(std_features, dtype=np.float64)   # whatever you feed into predict
+        # print("predict dtype:", Xp.dtype)
+        # print("predict finite:", np.isfinite(Xp).all())
+        # print("predict max|X|:", np.abs(Xp).max())
+        # print("any object dtype upstream?", getattr(getattr(std_features, 'dtypes', None), 'unique', lambda:[])())
+        
         undist = self.model.predict(std_features)
+        # exit()
         return undist
 
-class MetricRFMDC(DistortionCorrection):
+class U_RFM_DC(DistortionCorrection):
     def __init__(self, deg=7, name='metric_rfm_dc'):
         """
         deg: the highest degree of polynomial
@@ -45,12 +68,15 @@ class MetricRFMDC(DistortionCorrection):
         self.set_degree(deg)
         self.scaler = StandardScaler()
         self.model = LinearRegression(fit_intercept=False)
+        self.homo = None
 
     def set_degree(self, deg):
         self.degree = deg
         self.poly = PolynomialFeatures(self.degree) #bias is included in linear regression
 
     def estimate(self, source, dest, **kwargs):
+        super().estimate(source, dest)
+        #
         features = self.poly.fit_transform(source)
         std_features = self.scaler.fit_transform(features)
         std_features[:, 0] = 1 #常数项的特征scaler以后会变成0，需要置为1
@@ -62,7 +88,38 @@ class MetricRFMDC(DistortionCorrection):
         mat_y = np.column_stack([zeros, std_features, features_y])
         input_features = np.concatenate([mat_x, mat_y])
         target = np.concatenate([dest[:, 0], dest[:, 1]])
-        self.model.fit(input_features, target)      
+        # print(input_features.shape)
+        # import time
+        # start = time.time()
+        self.model.fit(input_features, target)
+        # end = time.time()
+        # print("training time rfm:", end-start)
+        return
+        predictions = self.model.predict(input_features)
+        x_coords = predictions[:1380]
+        y_coords = predictions[1380:]
+
+        # Stack the x and y coordinates along the second axis
+        points_array = np.column_stack((x_coords, y_coords))
+ 
+        residuals = np.linalg.norm(points_array - dest, axis=1)
+        std_residuals = np.std(residuals)
+        outlier_indices = residuals > 5*std_residuals
+        # cleaned_source = source[~outlier_indices]
+        # import matplotlib.pyplot as plt
+        # plt.scatter(cleaned_source[:, 0], cleaned_source[:, 1])
+        # plt.show()
+        # exit()
+
+        outlier_indices = np.concatenate([outlier_indices, outlier_indices])
+        # Remove outliers from the dataset
+        cleaned_input_features = input_features[~outlier_indices]
+        cleaned_target = target[~outlier_indices]
+
+        
+        # Refit the model using cleaned dataset
+        self.model.fit(cleaned_input_features, cleaned_target)
+   
     
     def undistort(self, points):
         features = self.poly.transform(points)
@@ -233,32 +290,80 @@ class MetricRTMDC1(DistortionCorrection):
         y = undist_x_y[s // 2:] + points[:, 1]
 
         return np.column_stack([x, y])
-    
-class MetricRTMDCN(DistortionCorrection):
-    def __init__(self, deg=7, tangential=True, name='metric_rtm_dc'):
-        """
-        deg: the highest degree of polynomial
-        """
-        super().__init__(name=name)        
-        self.tangential = tangential
-        self.set_degree(deg)
-        self.scaler = StandardScaler()
 
+# RTM model with no given COD for distortion correction
+# 
+class U_RTM_N(DistortionCorrection):
+    """
+    RTM model with no given COD for distortion correction.
+    """
+
+    def __init__(self, deg=7, tangential=True, name='metric_rtm_dc', fixk1=False):
+        """
+        Initialize the distortion correction model.
+
+        Parameters:
+        deg (int): The highest degree of the polynomial.
+        tangential (bool): Whether to include tangential distortion.
+        name (str): The name of the distortion correction model.
+        """
+        super().__init__(name=name)
+  
+        self.tangential = tangential
+
+        self.fixk1 = fixk1
+        self.set_degree(deg)
+        
     def set_degree(self, deg):
+        """
+        Set the degree of the polynomial and calculate the number of parameters.
+
+        Parameters:
+        deg (int): The highest degree of the polynomial.
+        """
         super().set_degree(deg)
-        self.terms = (deg - 1) // 2
-        self.param_count = 2 + self.terms + 2 # two for cod_d, two for cod_u
+        self.terms = (deg + 1) // 2
+        if self.fixk1:
+            self.terms -= 1
+        self.param_count = 2 + self.terms + 2 # 2 for cod_d, 2 for cod_u
+
         if self.tangential:
             self.param_count += 2
+        # print("number of parameters:", self.param_count)
         self.params:list = [0] * self.param_count
-    
+
+    def model_summary(self):
+        cod_d = self.params[:2]
+        cod_u = self.params[2:4]
+        print("cod_d: ", cod_d)
+        print("cod_u: ", cod_u)
+        dist_coef = self.params[4:]
+        print("dist_coef: ", dist_coef)
+
+
     def __undistort(self, xdata, *params):
+        """
+        Apply undistortion transformation to the input data.
+
+        Parameters:
+        xdata (numpy.ndarray): The input data with x and y coordinates.
+        params (tuple): The distortion parameters.
+
+        Returns:
+        numpy.ndarray: The undistorted coordinates.
+        """
         x = xdata[:, 0] - params[0]
         y = xdata[:, 1] - params[1]
         r2 = x**2 + y**2
-        ratio = np.ones_like(x)
-        for i in range(self.terms):
-            ratio += r2**(i + 1) * params[i + 2]
+        ratio = None
+        if self.fixk1:
+            ratio = np.ones_like(x)
+            for i in range(self.terms):
+                ratio += r2**(i + 1) * params[i + 4]
+        else:
+            ratio = np.zeros_like(x)
+            for i in range(self.terms):
+                ratio += r2**(i) * params[i + 4]
         xu = x * ratio + params[2]
         yu = y * ratio + params[3]
         if self.tangential:
@@ -268,15 +373,170 @@ class MetricRTMDCN(DistortionCorrection):
         return result
 
     def estimate(self, source, dest):
+        """
+        Estimate distortion parameters by minimizing the reprojection error.
+
+        Parameters:
+        source (numpy.ndarray): The source points (distorted).
+        dest (numpy.ndarray): The destination points (undistorted).
+        """
         # seems to have no way to normaliza data
         from scipy.optimize import curve_fit
-        # Minimize reprojection error with Levenberg-Marquardt              
+        # Flatten destination coordinates for curve fitting         
         dest = np.concatenate([dest[:, 0], dest[:, 1]])
-        popt, pcov = curve_fit(self.__undistort, source, dest, self.params, method='trf')
+        # Optimize parameters using Levenberg-Marquardt algorithm
+        popt, pcov = curve_fit(self.__undistort, source, dest, self.params, method='lm')
         self.params = list(popt)
         # print(self.params)
     
     def undistort(self, points):
+        """
+        Undistort a set of points using the estimated parameters.
+
+        Parameters:
+        points (numpy.ndarray): The points to undistort.
+
+        Returns:
+        numpy.ndarray: The undistorted points.
+        """
+        num = points.shape[0]
+        result = self.__undistort(points, *self.params)
+        x = result[:num]
+        y = result[num:]
+        return np.column_stack([x, y])
+
+# DM model with no given COD for distortion correction
+# the curvefit does not converge properly with fractional function, interesting
+# the parameters are fitted by rearange demonimator to the other side
+class U_DM_N(DistortionCorrection):
+    """
+    RTM model with no given COD for distortion correction.
+    """
+
+    def __init__(self, deg=7, name='metric_dm_dc', fixk1=False):
+        """
+        Initialize the distortion correction model.
+
+        Parameters:
+        deg (int): The highest degree of the polynomial.
+        tangential (bool): Whether to include tangential distortion.
+        name (str): The name of the distortion correction model.
+        """
+        super().__init__(name=name)
+
+        self.fixk1 = fixk1
+        self.set_degree(deg)
+        
+
+
+    def set_degree(self, deg):
+        """
+        Set the degree of the polynomial and calculate the number of parameters.
+
+        Parameters:
+        deg (int): The highest degree of the polynomial.
+        """
+        super().set_degree(deg)
+        self.terms = (deg + 1) // 2
+        if self.fixk1:
+            self.terms -= 1
+        self.param_count = 2 + self.terms + 2 # 2 for cod_d, 2 for cod_u
+
+        # print("number of parameters:", self.param_count)
+        self.params:list = [0] * self.param_count
+    
+    def model_summary(self):
+        cod_d = self.params[:2]
+        cod_u = self.params[2:4]
+        print("cod_d: ", cod_d)
+        print("cod_u: ", cod_u)
+        dist_coef = self.params[4:]
+        print("dist_coef: ", dist_coef)
+
+    def __estimate(self, xdata, *params):
+        xyd = xdata[0]
+        xyu = xdata[1]
+        xdc = xyd[:, 0] - params[0]
+        ydc = xyd[:, 1] - params[1]
+
+        xuc = xyu[:, 0] - params[2]
+        yuc = xyu[:, 1] - params[3]
+
+        r2 = xdc**2 + ydc**2
+        if self.fixk1:
+            ratio = np.ones_like(xdc)
+            for i in range(self.terms):
+                ratio += r2**(i + 1) * params[i + 4]
+        else:
+            ratio = np.zeros_like(xdc)
+            for i in range(self.terms):
+                ratio += r2**(i) * params[i + 4]
+
+        xd = xuc * ratio + params[0]
+        yd = yuc * ratio + params[1]
+
+
+        result = np.concatenate([xd, yd])
+        return result
+
+    def __undistort(self, xdata, *params):
+        """
+        Apply undistortion transformation to the input data.
+
+        Parameters:
+        xdata (numpy.ndarray): The input data with x and y coordinates.
+        params (tuple): The distortion parameters.
+
+        Returns:
+        numpy.ndarray: The undistorted coordinates.
+        """
+        x = xdata[:, 0] - params[0]
+        y = xdata[:, 1] - params[1]
+        r2 = x**2 + y**2
+        ratio = None
+        if self.fixk1:
+            ratio = np.ones_like(x)
+            for i in range(self.terms):
+                ratio += r2**(i + 1) * params[i + 4]
+        else:
+            ratio = np.zeros_like(x)
+            for i in range(self.terms):
+                ratio += r2**(i) * params[i + 4]
+
+        xu = x / ratio + params[2]
+        yu = y / ratio + params[3]
+
+        result = np.concatenate([xu, yu])
+        return result
+
+    def estimate(self, source, dest):
+        """
+        Estimate distortion parameters by minimizing the reprojection error.
+
+        Parameters:
+        source (numpy.ndarray): The source points (distorted).
+        dest (numpy.ndarray): The destination points (undistorted).
+        """
+        # seems to have no way to normaliza data
+        from scipy.optimize import curve_fit
+        # Flatten destination coordinates for curve fitting        
+        x = (source, dest)
+        y = np.concatenate([source[:, 0], source[:, 1]])
+        # Optimize parameters using Levenberg-Marquardt algorithm
+        popt, pcov = curve_fit(self.__estimate, x, y, self.params, method='lm')
+        self.params = list(popt)
+        # print(self.params)
+    
+    def undistort(self, points):
+        """
+        Undistort a set of points using the estimated parameters.
+
+        Parameters:
+        points (numpy.ndarray): The points to undistort.
+
+        Returns:
+        numpy.ndarray: The undistorted points.
+        """
         num = points.shape[0]
         result = self.__undistort(points, *self.params)
         x = result[:num]
@@ -420,7 +680,7 @@ class MetricRadialPolyDC(DistortionCorrection):
     def __init__(self, deg=7, name='metric_radialpoly_dc'):
         super().__init__(name)
         self.radial = MetricRTMDC(deg, False)
-        self.poly = MetricRFMDC(deg)
+        self.poly = U_RFM_DC(deg)
         self.set_degree(deg)
     
     def set_degree(self, deg):
@@ -437,6 +697,7 @@ class MetricRadialPolyDC(DistortionCorrection):
         image_u = self.poly.undistort(image_t)
         return image_u
 
+# not a good idea
 # class DPMetricMLPDC(DistortionCorrection):
 #     def __init__(self, neurons=100, hlayer=1, name='metric_mlp_dc'):
 #         super().__init__(name=name)
@@ -459,3 +720,31 @@ class MetricRadialPolyDC(DistortionCorrection):
 
 #         return undist
 
+def train_decoupled(name, path, size, model=U_RFM_DC, reverse=False):
+    import cv2
+    from common.chessboard import findchessboard, create_ground_truth
+    img = cv2.imread(path, 0)
+
+    corners = findchessboard(image=img, size=size)
+    target = create_ground_truth(size)
+    # import matplotlib.pyplot as plt
+    # print(corners)
+    # print(target)
+    if reverse:
+        corners, target = target, corners
+    de = U_RFM_DC(3)
+    # X_train, X_test, y_train, y_test = train_test_split(corners, target, test_size=0.8)
+    de.estimate(corners, target)
+    mse = de.evaluate(corners, target)
+    print(mse)
+    de.save_model(name)
+
+
+if __name__ == "__main__":
+    pass
+    # train_decoupled('decoupled_glass_11x8', 'data/decoupled/glass_8x11full.bmp', (8, 11))
+    train_decoupled('decoupled_glass_30x46', 'data/decoupled/46x30.bmp', (30, 46))
+    # train_decoupled('de_laptop', 'data/decoupled/laptop/46x30.jpg', (30, 46))
+    # train_decoupled('de_laptop_c1', 'data/decoupled/laptop/8x11.jpg', (8, 11))
+
+    # train_decoupled('de_laptop_reverse', 'data/decoupled/laptop/46x30.jpg', (30, 46), reverse=True)

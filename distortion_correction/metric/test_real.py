@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from common.geometry import distancePoint
-from distortion_correction.metric.regression_dc import MetricPolyDC, MetricRTMDC
+from distortion_correction.metric.regression_dc import U_PM, MetricRTMDC
 
 def estimate():
     from common.chessboard import findchessboard, grid_ground_truth
@@ -11,7 +11,7 @@ def estimate():
     assert(truth.shape == corners.shape)
 
     truth[:, [0, 1]] = truth[:, [1, 0]]
-    mgp = MetricPolyDC(5)
+    mgp = U_PM(5)
     mgp.estimate(corners, truth)
     mgp.save_model('30x46_5')
 
@@ -38,7 +38,7 @@ def case1():
     # X_test = corners[800:]
     # y_test = truth[800:]
 
-    mgp = MetricPolyDC(5)
+    mgp = U_PM(5)
     mgp.estimate(X_train, y_train)
 
     pred_train = mgp.undistort(X_train)
@@ -79,7 +79,7 @@ def case2():
     # X_test = corners[800:]
     # y_test = truth[800:]
 
-    mgp = MetricPolyDC(5)
+    mgp = U_PM(5)
     mrp = MetricRTMDC(2)
     mgp.estimate(X_train, y_train)
     mrp.estimate(X_train, y_train)
