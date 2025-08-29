@@ -1,0 +1,94 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+from common.plot import my_plot_style
+
+errors_a = [7.674449629058633e-06,
+4.520021437574784e-06,
+1.3476888052833696e-05,
+1.2947456534062068e-05,
+2.2876568242507592e-06,
+1.7701851622293534e-05,
+1.0599310133014787e-05,
+4.744290026365574e-06,
+3.6012581133066494e-05,
+4.099310889182965e-06,
+5.764764721266968e-06,
+0.00019658958666494609,
+4.3963054627161726e-06,
+0.00014215878461842625,
+8.896645756133622e-06,
+5.555922103527038e-06,
+3.7116144522422985e-06,
+6.655926258503394e-06]
+
+errors_b = [0.008468513149165172,
+8.021221217518397e-05,
+0.0008648339086067654,
+0.0020096330706851325,
+0.0001737432993001368,
+0.005690968541351232,
+0.012259481952140844,
+0.00038071725266780707,
+0.0008018591142497814,
+2.5485601497171912e-05,
+0.00012426103788520484,
+0.0006525536161684181,
+0.00019574917488239765,
+0.0008990169260620264,
+0.002500354158288496,
+0.0018971406561041815,
+5.9549029951151926e-05,
+0.0009012097270533532]
+
+errors_c = [
+0.01802970634683075,
+0.0018584822181442302,
+0.005150534945230407,
+0.006673297244236543,
+0.0021957434717543895,
+0.014309515114449873,
+0.019667071998429934,
+0.002010375657164831,
+0.0014291020058619242,
+0.00046698303419954996,
+0.0008134061998203921,
+0.005880386146207864,
+0.0022604100034498307,
+0.0010029858883595063,
+0.00958795032648489,
+0.008547605328110287,
+0.0015593542025136055,
+0.002622535982591885
+]
+
+indices = np.arange(len(errors_a))
+bar_width = 0.35
+
+# Create figure and axis
+fig, ax = plt.subplots()
+
+# Create lollipop plot: plot vertical lines and circular markers
+ax.vlines(indices, 0, errors_b, color='#2C3284', alpha=0.9, linewidth=3)
+ax.scatter(indices, errors_b, color='#2C3284', zorder=5, label='conventional')
+
+# ax.vlines(indices, 0, errors_a, color='#F47750', alpha=0.9, linewidth=3)
+# ax.scatter(indices, errors_a, color='#F47750', zorder=5, label='two-stage', marker='^')
+ax.vlines(indices, 0, errors_a, color='#F5AA42', alpha=0.9, linewidth=3)
+ax.scatter(indices, errors_a, color='#F5AA42', zorder=5, label='two-stage', marker='^')
+
+# Customize labels and title
+ax.set_xlabel('Index')
+ax.set_ylabel('log(RMSE)')
+plt.legend()
+# Display the plot
+plt.yscale('log')
+plt.show()
+# plt.bar(indices, errors_b, width=bar_width, label='conventional')
+# plt.bar(indices, errors_a, width=bar_width, label='two-stage')
+
+# plt.xlabel('Index')
+# plt.yscale('log')
+# plt.ylabel('log(RMSE)')
+# plt.legend()
+# plt.show()
